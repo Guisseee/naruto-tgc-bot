@@ -1,0 +1,65 @@
+# Configuración del bot de avisos del NARUTO CARD GAME (Bandai)
+# Importante: la sangría se hace con 2 espacios, nunca con tabuladores.
+
+juego:
+  nombre: "NARUTO CARD GAME"
+  editorial: "Bandai Card Games"
+
+# Palabras que indican que un texto trata del juego (en minúsculas).
+palabras_clave:
+  es:
+    - "naruto card game"
+    - "juego de cartas de naruto"
+    - "juego de cartas naruto"
+  en:
+    - "naruto card game"
+    - "naruto tcg"
+    - "naruto trading card game"
+  ja:
+    - "naruto カードゲーム"   # verificar el nombre oficial en japonés
+
+# Si aparece alguna de estas palabras, el texto se descarta (otros juegos o ruido).
+exclusiones:
+  - "mythos"        # Naruto Mythos TCG (Cicaboom), es otro juego
+  - "cicaboom"
+  - "kayou"         # tarjetas coleccionables chinas, suelen colarse en las búsquedas
+  - "naruto ccg"    # el antiguo juego de 2006-2013
+  - "collectible card game"
+
+# Palabras que indican preventa o reserva, por idioma.
+preventa:
+  es: ["preventa", "reserva", "reservar", "reserva ya"]
+  en: ["pre-order", "preorder", "pre order", "preorders open"]
+  fr: ["précommande"]
+  de: ["vorbestellung"]
+  ja: ["予約"]
+
+# Noticias críticas: se envían al momento y no esperan al resumen.
+criticas:
+  - "release date"
+  - "fecha de lanzamiento"
+  - "fecha de salida"
+  - "pre-order"
+  - "preventa"
+  - "booster"
+  - "expansion"
+  - "expansión"
+
+# Con qué frecuencia revisa el bot (solo se usa en el modo local --daemon).
+# En GitHub Actions la frecuencia la marca el archivo revisar.yml.
+revision:
+  minutos_tiendas: 10
+  minutos_noticias: 30
+  pausa_segundos_por_dominio: 5   # espera mínima entre peticiones al mismo sitio
+
+# Resúmenes de noticias no urgentes.
+resumenes:
+  diario: true
+  hora_diaria: "09:00"
+  semanal: true
+  dia_semanal: "lunes"
+  zona_horaria: "Europe/Madrid"
+
+# Orden de importancia, de más a menos.
+importancia:
+  niveles: ["critica", "alta", "media", "baja"]

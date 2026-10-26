@@ -24,7 +24,6 @@ exclusiones:
   - "cicaboom"
   - "kayou"         # tarjetas coleccionables chinas, suelen colarse en las búsquedas
   - "naruto ccg"    # el antiguo juego de 2006-2013
-  - "collectible card game"
 
 # Palabras que indican preventa o reserva, por idioma.
 preventa:

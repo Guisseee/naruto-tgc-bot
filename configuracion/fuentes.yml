@@ -1,0 +1,76 @@
+# Fuentes vigiladas por el bot.
+# Cada fuente empieza con "- id:". La sangría es de 2 espacios, sin tabuladores.
+#
+# tipo:          oficial | distribuidor | medio | tienda | comunidad
+# peso_inicial:  de 0 a 100. Sube o baja con el tiempo según acierte la fuente.
+# metodo:        rss (un feed) | html (leer la página) | tienda (vigilar el estado de una ficha)
+# activa:        false hasta que hayas comprobado la url a mano en el navegador.
+
+fuentes:
+
+  # ---------- OFICIALES (confirmadas por búsqueda, falta verificar la url exacta) ----------
+  - id: naruto_oficial_noticias
+    nombre: "Web oficial de Naruto, sección de noticias"
+    tipo: oficial
+    peso_inicial: 95
+    pais: "JP/Global"
+    idioma: en
+    metodo: html
+    url: "VERIFICAR"   # el dominio es naruto-official.com, sección /en/news/
+    activa: false
+
+  - id: web_oficial_juego
+    nombre: "Web oficial del NARUTO CARD GAME"
+    tipo: oficial
+    peso_inicial: 95
+    pais: "Global"
+    idioma: en
+    metodo: html
+    url: "VERIFICAR"   # aparece como naruto-cardgame.com en un comunicado, pero el texto estaba cortado
+    activa: false
+
+  - id: asmodee_prensa
+    nombre: "Asmodee, notas de prensa (distribuidor en el EEE)"
+    tipo: distribuidor
+    peso_inicial: 85
+    pais: "Europa"
+    idioma: en
+    metodo: html
+    url: "VERIFICAR"   # hay que localizar su sección de noticias o prensa
+    activa: false
+
+  # ---------- MEDIOS (dominio confirmado) ----------
+  - id: animecorner
+    nombre: "Anime Corner"
+    tipo: medio
+    peso_inicial: 60
+    pais: "Global"
+    idioma: en
+    metodo: rss
+    url: "VERIFICAR"   # animecorner.me, comprobar si ofrece feed RSS
+    activa: false
+
+  # ---------- PLANTILLAS: copia y rellena ----------
+  # Tienda española (cuando haya ficha o página de preventa):
+  # - id: tienda_es_1
+  #   nombre: "Nombre de la tienda"
+  #   tipo: tienda
+  #   peso_inicial: 70
+  #   pais: "ES"
+  #   idioma: es
+  #   metodo: tienda
+  #   url: "https://..."
+  #   envia_a_espana: true
+  #   activa: false
+  #
+  # Tienda internacional (EE. UU., Reino Unido...):
+  # - id: tienda_us_1
+  #   nombre: "Nombre de la tienda"
+  #   tipo: tienda
+  #   peso_inicial: 70
+  #   pais: "US"
+  #   idioma: en
+  #   metodo: tienda
+  #   url: "https://..."
+  #   envia_a_espana: null   # null = no lo sé, se avisará de que hay que comprobarlo
+  #   activa: false

@@ -86,6 +86,11 @@ def menciona_preventa(texto, config):
     return _primera_coincidencia(texto, _aplanar(config.get("preventa"))) is not None
 
 
+def menciona_sorteo(texto, config):
+    """True si el texto habla de comprar por sorteo, invitación o cola virtual."""
+    return _primera_coincidencia(texto, _aplanar(config.get("sorteo"))) is not None
+
+
 def es_critica(texto, config):
     return _primera_coincidencia(texto, _aplanar(config.get("criticas"))) is not None
 
@@ -104,13 +109,14 @@ def clasificar_elemento(elemento, fuente, config):
 
     tipo = fuente.get("tipo", "comunidad")
     preventa = menciona_preventa(texto, config)
+    sorteo = menciona_sorteo(texto, config)
     critica = es_critica(texto, config)
 
-    if preventa and tipo in TIPOS_CON_PREVENTA:
+    if (preventa or sorteo) and tipo in TIPOS_CON_PREVENTA:
         categoria, importancia = "preventa", "critica"
     else:
         categoria = "noticia"
-        if preventa or critica:
+        if preventa or sorteo or critica:
             importancia = IMPORTANCIA_MAXIMA.get(tipo, "media")
         else:
             importancia = IMPORTANCIA_BASE.get(tipo, "baja")
@@ -121,6 +127,7 @@ def clasificar_elemento(elemento, fuente, config):
         "etiqueta": ETIQUETAS.get(tipo, ETIQUETAS["comunidad"]),
         "es_rumor": tipo == "comunidad",
         "menciona_preventa": preventa,
+        "acceso": "sorteo" if sorteo else "directo",
         "motivo": motivo,
     }
 
@@ -133,8 +140,14 @@ def es_novedad_tienda(estado_anterior, estado_nuevo):
     estado_anterior es el último estado CONOCIDO (None si es la primera vez).
     Quien llame a esta función no debe guardar "desconocido" sobre un estado
     conocido, para no provocar avisos repetidos por lecturas fallidas.
+
+    - Un sorteo o invitación avisa siempre que antes no lo hubiera.
+    - Una preventa o disponibilidad avisa si antes estaba agotado, sin conocer,
+      o en sorteo (la venta general se abre después del sorteo).
     """
-    return estado_nuevo in ("preventa", "disponible") and estado_anterior in (None, "agotado")
+    if estado_nuevo == "sorteo":
+        return estado_anterior != "sorteo"
+    return estado_nuevo in ("preventa", "disponible") and estado_anterior in (None, "agotado", "sorteo")
 
 
 def clasificar_tienda(resultado, fuente, config, estado_anterior):
@@ -162,6 +175,7 @@ def clasificar_tienda(resultado, fuente, config, estado_anterior):
         "etiqueta": ETIQUETAS["tienda"],
         "es_rumor": False,
         "estado": resultado["estado"],
+        "acceso": "sorteo" if resultado["estado"] == "sorteo" else "directo",
         "precio": resultado.get("precio"),
         "moneda": resultado.get("moneda"),
         "titulo": resultado.get("titulo", ""),
@@ -180,6 +194,7 @@ if __name__ == "__main__":
         "palabras_clave": {"es": ["naruto card game"], "en": ["naruto tcg"]},
         "exclusiones": ["mythos"],
         "preventa": {"es": ["preventa", "reservar"], "en": ["pre-order"]},
+        "sorteo": {"es": ["cola virtual"], "en": ["raffle", "request an invitation"]},
         "criticas": ["release date", "expansión"],
     }
 
@@ -190,17 +205,25 @@ if __name__ == "__main__":
     assert es_critica("EXPANSION anunciada del Naruto Card Game", cfg) is True
     assert menciona_preventa("Ya puedes RESERVAR el juego", cfg) is True
     assert menciona_preventa("Un preorderable no cuenta", cfg) is False  # no empieza una palabra clave
+    assert menciona_sorteo("Hay que REQUEST AN INVITATION para comprar", cfg) is True
+    assert menciona_sorteo("Preventa abierta", cfg) is False
 
     def noticia(titulo, resumen=""):
         return Obj(titulo=titulo, resumen=resumen)
 
-    # Fuente oficial que menciona una preventa -> preventa crítica
+    # Fuente oficial que menciona una preventa -> preventa crítica, acceso directo
     r = clasificar_elemento(noticia("Naruto Card Game pre-order opens"), {"tipo": "oficial"}, cfg)
-    assert r["categoria"] == "preventa" and r["importancia"] == "critica"
+    assert r["categoria"] == "preventa" and r["importancia"] == "critica" and r["acceso"] == "directo"
 
-    # Un medio que menciona preventa -> noticia, como mucho "alta"
+    # Fuente oficial que anuncia un sorteo de compra -> preventa crítica, acceso por sorteo
+    r = clasificar_elemento(noticia("Naruto Card Game booster box raffle opens"), {"tipo": "oficial"}, cfg)
+    assert r["categoria"] == "preventa" and r["importancia"] == "critica" and r["acceso"] == "sorteo"
+
+    # Un medio que menciona preventa o sorteo -> noticia, como mucho "alta"
     r = clasificar_elemento(noticia("Naruto Card Game pre-order rumored"), {"tipo": "medio"}, cfg)
     assert r["categoria"] == "noticia" and r["importancia"] == "alta"
+    r = clasificar_elemento(noticia("Naruto Card Game raffle in a store"), {"tipo": "medio"}, cfg)
+    assert r["categoria"] == "noticia" and r["importancia"] == "alta" and r["acceso"] == "sorteo"
 
     # Comunidad: rumor, como mucho "media"
     r = clasificar_elemento(noticia("Naruto TCG release date leaked"), {"tipo": "comunidad"}, cfg)
@@ -211,11 +234,24 @@ if __name__ == "__main__":
     assert r["categoria"] == "noticia" and r["importancia"] == "alta"
     assert clasificar_elemento(noticia("Pokemon pre-order"), {"tipo": "oficial"}, cfg) is None
 
+    # Cambios de estado en tiendas
+    assert es_novedad_tienda(None, "preventa") is True
+    assert es_novedad_tienda("agotado", "disponible") is True
+    assert es_novedad_tienda("preventa", "preventa") is False
+    assert es_novedad_tienda(None, "sorteo") is True
+    assert es_novedad_tienda("agotado", "sorteo") is True
+    assert es_novedad_tienda("preventa", "sorteo") is True      # un sorteo nuevo es una oportunidad nueva
+    assert es_novedad_tienda("sorteo", "sorteo") is False
+    assert es_novedad_tienda("sorteo", "disponible") is True    # tras el sorteo se abre la venta general
+    assert es_novedad_tienda("sorteo", "agotado") is False
+    assert es_novedad_tienda("preventa", "disponible") is False
+
     # Tiendas
     tienda = {"tipo": "tienda", "envia_a_espana": True}
     ficha = {"estado": "preventa", "titulo": "Naruto Card Game Booster", "precio": "5.00", "moneda": "EUR"}
     r = clasificar_tienda(ficha, tienda, cfg, None)
     assert r["categoria"] == "preventa" and r["primera_vez"] is True and r["envia_a_espana"] is True
+    assert r["acceso"] == "directo"
     assert clasificar_tienda(ficha, tienda, cfg, "agotado") is not None
     assert clasificar_tienda(ficha, tienda, cfg, "preventa") is None          # no ha cambiado nada
     assert clasificar_tienda({**ficha, "estado": "desconocido"}, tienda, cfg, None) is None
@@ -223,6 +259,12 @@ if __name__ == "__main__":
     ajena = {**ficha, "titulo": "Pokemon Booster"}
     assert clasificar_tienda(ajena, tienda, cfg, None) is None                # título ajeno al juego
     assert clasificar_tienda(ajena, {**tienda, "ficha_verificada": True}, cfg, None) is not None
+
+    # Tienda con sorteo
+    ficha_sorteo = {**ficha, "estado": "sorteo"}
+    r = clasificar_tienda(ficha_sorteo, tienda, cfg, "agotado")
+    assert r is not None and r["acceso"] == "sorteo" and r["categoria"] == "preventa"
+    assert clasificar_tienda(ficha_sorteo, tienda, cfg, "sorteo") is None     # ya se avisó
 
     # Prueba con tu configuración real, si existe
     ruta = Path(__file__).resolve().parent.parent / "configuracion" / "configuracion.yml"
@@ -233,6 +275,9 @@ if __name__ == "__main__":
         assert es_del_juego("Naruto Mythos TCG Set 2 llega en septiembre", real)[0] is False
         assert menciona_preventa("Preventa del juego de cartas de Naruto", real) is True
         assert menciona_preventa("Naruto TCG: précommande ouverte", real) is True
+        assert menciona_sorteo("Solicitar invitación para el Naruto Card Game", real) is True
+        assert menciona_sorteo("Naruto TCG booster box raffle", real) is True
+        assert menciona_sorteo("Preventa abierta del Naruto Card Game", real) is False
         print("Prueba con configuracion.yml real OK")
 
     print("Clasificador OK")

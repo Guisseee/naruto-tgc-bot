@@ -93,6 +93,7 @@ def leer_html(texto, fuente):
 # ---------- Estado de una ficha de tienda ----------
 
 # Valores de "availability" de schema.org -> nuestro estado
+# (schema.org no tiene un valor para sorteos o invitaciones: eso se detecta por los botones)
 ESTADOS_SCHEMA = {
     "preorder": "preventa",
     "presale": "preventa",
@@ -106,8 +107,14 @@ ESTADOS_SCHEMA = {
     "discontinued": "agotado",
 }
 
-# Plan B: palabras que aparecen en los botones de la ficha
+# Palabras que aparecen en los botones de la ficha
 PALABRAS_BOTON = {
+    "sorteo": [
+        "request an invitation", "request invitation", "invitation request",
+        "solicitar invitación", "solicitar invitacion", "solicitar una invitación",
+        "raffle", "lottery", "enter the draw", "sorteo", "participar en el sorteo",
+        "cola virtual", "virtual queue", "join the queue", "waiting room", "抽選",
+    ],
     "preventa": [
         "pre-order", "preorder", "pre order", "preventa", "reservar",
         "reserva ya", "précommande", "vorbestellen", "予約",
@@ -141,16 +148,37 @@ def _contenido_meta(sopa, propiedad):
     return meta["content"].strip() if meta and meta.get("content") else None
 
 
+def _estados_por_botones(sopa):
+    """Devuelve el conjunto de estados que sugieren los textos de los botones de la página."""
+    textos = [b.get_text(" ").strip().lower() for b in sopa.find_all("button")]
+    for campo in sopa.find_all("input", attrs={"type": ["submit", "button"]}):
+        textos.append((campo.get("value") or "").strip().lower())
+    for enlace in sopa.find_all("a", attrs={"role": "button"}):
+        textos.append(enlace.get_text(" ").strip().lower())
+
+    detectados = set()
+    for texto_boton in textos:
+        for estado, palabras in PALABRAS_BOTON.items():
+            if any(palabra in texto_boton for palabra in palabras):
+                detectados.add(estado)
+    return detectados
+
+
 def leer_estado_tienda(texto, fuente=None):
     """Lee una ficha de producto y devuelve un diccionario con:
-    estado ("preventa", "disponible", "agotado" o "desconocido"), precio, moneda,
-    titulo y metodo ("json-ld" o "texto", cómo se llegó a esa conclusión).
+    estado ("sorteo", "preventa", "disponible", "agotado" o "desconocido"), precio,
+    moneda, titulo y metodo ("json-ld" o "texto", cómo se llegó a esa conclusión).
+
+    "sorteo" significa que se compra por sorteo, invitación o cola virtual: hay que
+    apuntarse en la tienda. Solo se detecta por el texto de los botones.
     """
     sopa = BeautifulSoup(texto, "html.parser")
 
     titulo = _contenido_meta(sopa, "og:title") or ""
     if not titulo and sopa.title and sopa.title.string:
         titulo = sopa.title.string.strip()
+
+    detectados = _estados_por_botones(sopa)
 
     # --- Método 1: datos estructurados JSON-LD (el más fiable) ---
     encontrados = []
@@ -169,6 +197,9 @@ def leer_estado_tienda(texto, fuente=None):
     for preferido in ("preventa", "disponible", "agotado"):
         for estado, oferta in encontrados:
             if estado == preferido:
+                # Una ficha "agotada" con botón de sorteo o invitación en realidad se puede pedir
+                if estado == "agotado" and "sorteo" in detectados:
+                    estado = "sorteo"
                 precio = oferta.get("price")
                 return {
                     "estado": estado,
@@ -179,17 +210,9 @@ def leer_estado_tienda(texto, fuente=None):
                 }
 
     # --- Método 2: texto de los botones ---
-    textos = [b.get_text(" ").strip().lower() for b in sopa.find_all("button")]
-    for campo in sopa.find_all("input", attrs={"type": ["submit", "button"]}):
-        textos.append((campo.get("value") or "").strip().lower())
-
-    detectados = set()
-    for texto_boton in textos:
-        for estado, palabras in PALABRAS_BOTON.items():
-            if any(palabra in texto_boton for palabra in palabras):
-                detectados.add(estado)
-
-    if "agotado" in detectados and len(detectados) > 1:
+    if "sorteo" in detectados:
+        estado = "sorteo"   # prevalece sobre un "agotado" que suele ser solo el stock directo
+    elif "agotado" in detectados and len(detectados) > 1:
         estado = "desconocido"   # botones contradictorios: no adivinamos
     elif "preventa" in detectados:
         estado = "preventa"
@@ -257,5 +280,22 @@ if __name__ == "__main__":
     assert leer_estado_tienda(mezcla)["estado"] == "desconocido"
     # Sin ninguna pista
     assert leer_estado_tienda("<p>Hola</p>")["estado"] == "desconocido"
+
+    # Sorteo, invitación o cola
+    assert leer_estado_tienda("<button>Request an invitation</button>")["estado"] == "sorteo"
+    assert leer_estado_tienda("<button>Solicitar invitación</button>")["estado"] == "sorteo"
+    assert leer_estado_tienda('<a role="button">Join the queue</a>')["estado"] == "sorteo"
+    # El sorteo prevalece sobre un "agotado" que convive en la página
+    assert leer_estado_tienda("<button>Sold out</button><button>Enter the raffle</button>")["estado"] == "sorteo"
+    # Datos estructurados "agotado" + botón de invitación = sorteo, conservando el precio
+    ficha_sorteo = (
+        '<html><head><title>Booster Box</title>'
+        '<script type="application/ld+json">{"@type":"Product","name":"Booster Box",'
+        '"offers":{"@type":"Offer","price":"89.90","priceCurrency":"EUR",'
+        '"availability":"https://schema.org/OutOfStock"}}</script></head>'
+        "<body><button>Request an invitation</button></body></html>"
+    )
+    r = leer_estado_tienda(ficha_sorteo)
+    assert r["estado"] == "sorteo" and r["precio"] == "89.90" and r["metodo"] == "json-ld"
 
     print("Lectores OK")

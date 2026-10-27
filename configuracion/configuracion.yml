@@ -62,3 +62,10 @@ resumenes:
 # Orden de importancia, de más a menos.
 importancia:
   niveles: ["critica", "alta", "media", "baja"]
+
+# Frases que indican que se compra por sorteo, invitación o cola (hay que apuntarse en la tienda).
+# Son frases concretas a propósito: la palabra "sorteo" sola también se usa en regalos de cartas.
+sorteo:
+  es: ["solicitar invitación", "solicitar una invitación", "sorteo de compra", "sorteo para comprar", "cola virtual"]
+  en: ["request an invitation", "invitation request", "raffle", "lottery", "virtual queue", "enter the draw"]
+  ja: ["抽選販売", "抽選"]

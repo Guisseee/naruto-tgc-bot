@@ -47,8 +47,8 @@ fuentes:
     pais: "Global"
     idioma: en
     metodo: rss
-    url: "VERIFICAR"   # animecorner.me, comprobar si ofrece feed RSS
-    activa: false
+    url: "https://animecorner.me/feed/"
+    activa: true
 
   # ---------- PLANTILLAS: copia y rellena ----------
   # Tienda española (cuando haya ficha o página de preventa):

@@ -1,0 +1,85 @@
+name: Revisar fuentes
+
+on:
+  schedule:
+    # Cada 5 minutos (el mínimo que permite GitHub). Evita el minuto 0, que suele ir cargado.
+    - cron: "3-59/5 * * * *"
+  workflow_dispatch:   # permite lanzarlo a mano desde la pestaña Actions
+    inputs:
+      modo:
+        description: "Qué hacer"
+        type: choice
+        options:
+          - revisar
+          - prueba
+        default: revisar
+
+permissions:
+  contents: write   # necesario para guardar el estado en la rama "state"
+
+concurrency:
+  group: bot-naruto
+  cancel-in-progress: false   # si una ejecución sigue en marcha, la siguiente espera
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DISCORD_WEBHOOK_PREVENTAS: ${{ secrets.DISCORD_WEBHOOK_PREVENTAS }}
+      DISCORD_WEBHOOK_NOTICIAS: ${{ secrets.DISCORD_WEBHOOK_NOTICIAS }}
+      DISCORD_WEBHOOK_ESTADO: ${{ secrets.DISCORD_WEBHOOK_ESTADO }}
+      DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+      RUTA_BD: ${{ github.workspace }}/estado/bot.db
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar librerías
+        run: pip install -r requirements.txt
+
+      - name: Recuperar el estado guardado
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          REPO="https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code --heads "$REPO" state > /dev/null 2>&1; then
+            git clone --depth 1 --branch state "$REPO" estado
+          else
+            mkdir estado
+            git -C estado init -b state
+            git -C estado remote add origin "$REPO"
+          fi
+
+      - name: Ejecutar el bot
+        env:
+          MODO: ${{ github.event.inputs.modo }}
+        run: |
+          if [ "$MODO" = "prueba" ]; then
+            python codigo/principal.py --prueba
+          else
+            python codigo/principal.py --una-vez
+          fi
+
+      - name: Guardar el estado
+        if: ${{ !cancelled() }}
+        run: |
+          cd estado
+          git config user.name "bot-avisos"
+          git config user.email "bot-avisos@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          if git rev-parse --verify HEAD > /dev/null 2>&1; then
+            git commit --amend -m "Estado del bot"
+          else
+            git commit -m "Estado del bot"
+          fi
+          git push --force origin HEAD:state
